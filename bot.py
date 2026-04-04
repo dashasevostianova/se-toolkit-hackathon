@@ -240,20 +240,19 @@ def main() -> None:
     # Регистрируем обработчик inline-кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Настраиваем ежедневную рассылку (9:00 утра по UTC)
+    # Настраиваем рассылку каждые 3 минуты (для тестирования)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         daily_word_job,
-        "cron",
-        hour=9,
-        minute=0,
+        "interval",
+        minutes=3,
         args=[application._job_queue],
         replace_existing=True,
     )
     scheduler.start()
 
     logger.info("Бот запущен! Ожидание сообщений...")
-    logger.info("Ежедневная рассылка настроена на 9:00 UTC")
+    logger.info("⏰ ТЕСТОВЫЙ РЕЖИМ: рассылка каждые 3 минуты")
 
     # Запускаем бота
     application.run_polling(allowed_updates=Update.ALL_TYPES)
