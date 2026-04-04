@@ -16,8 +16,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes,
 )
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
 from vocabulary import VOCABULARY
 
 # Настройка логирования
@@ -273,8 +271,10 @@ def main() -> None:
     # Загружаем сохранённых пользователей
     load_users()
 
-    # Создаём приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Создаём приложение с job_queue
+    application = Application.builder().token(BOT_TOKEN).job_queue(
+        job_queue_enabled=True
+    ).build()
 
     # Обработчик ошибок
     application.add_error_handler(error_handler)
@@ -289,15 +289,13 @@ def main() -> None:
     # Регистрируем обработчик inline-кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Настраиваем рассылку каждые 3 минуты (для тестирования)
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(
+    # Настраиваем рассылку каждые 3 минуты через встроенный job_queue
+    application.job_queue.run_repeating(
         scheduled_word_job,
-        "interval",
-        minutes=3,
-        replace_existing=True,
+        interval=180,  # 3 минуты в секундах
+        first=180,     # первый запуск через 3 минуты
+        name="word_sender",
     )
-    scheduler.start()
 
     logger.info("Бот запущен! Ожидание сообщений...")
     logger.info(f"Зарегистрировано пользователей: {len(registered_users)}")
