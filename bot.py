@@ -15,30 +15,23 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
-    JobQueue,
 )
 from vocabulary import VOCABULARY
 
-# Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-# Получаем токен из переменной окружения
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-# Файл для хранения данных пользователей
 USERS_FILE = "users.json"
 
-# Глобальное хранилище
 users_data: dict = {}
 registered_users: set = set()
 
 
 def load_users():
-    """Загружает данные пользователей из файла."""
     global users_data, registered_users
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
@@ -51,7 +44,6 @@ def load_users():
 
 
 def save_users():
-    """Сохраняет данные пользователей в файл."""
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump({
             "users": users_data,
@@ -60,7 +52,6 @@ def save_users():
 
 
 def get_word_for_user(user_id: int) -> dict:
-    """Получить слово для пользователя."""
     uid = str(user_id)
     if uid not in users_data:
         users_data[uid] = {"seen_words": [], "last_word": None, "date": None}
@@ -68,11 +59,9 @@ def get_word_for_user(user_id: int) -> dict:
     user = users_data[uid]
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # Если сегодня уже получал — вернуть то же
     if user["date"] == today and user["last_word"]:
         return next(w for w in VOCABULARY if w["word"] == user["last_word"])
 
-    # Новое слово
     seen = set(user["seen_words"])
     available = [w for w in VOCABULARY if w["word"] not in seen]
     if not available:
@@ -88,7 +77,6 @@ def get_word_for_user(user_id: int) -> dict:
 
 
 def format_word_message(word: dict) -> str:
-    """Форматирует сообщение со словом."""
     return (
         f"{word['emoji']} <b>{word['word']}</b>\n\n"
         f"🇷🇺 <b>Перевод:</b> {word['translation']}\n\n"
@@ -229,19 +217,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def send_words_to_all(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Рассылка слов всем пользователям."""
     logger.info(f"[JOB] Запуск рассылки. Пользователей: {len(registered_users)}")
-    logger.info(f"[JOB] registered_users = {list(registered_users)}")
-
     if not registered_users:
-        logger.warning("[JOB] Нет пользователей для рассылки!")
+        logger.warning("[JOB] Нет пользователей!")
         return
 
     for user_id in registered_users:
         try:
             word = get_word_for_user(user_id)
             msg = format_word_message(word)
-
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"📚 <b>Новое слово!</b>\n\n{msg}",
@@ -260,37 +244,27 @@ def main() -> None:
 
     load_users()
 
-    # Создаём приложение с JobQueue
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("word", show_word))
     application.add_handler(CommandHandler("next", next_cmd))
     application.add_handler(CommandHandler("stats", show_stats))
     application.add_handler(CommandHandler("help", show_help))
-
-    # Кнопки
     application.add_handler(CallbackQueryHandler(button_handler))
-
-    # Ошибки
     application.add_error_handler(lambda update, ctx: logger.error("Error: %s", ctx.error))
 
-    # === РАССЫЛКА каждые 3 минуты ===
-    async def startup_callback(app: Application):
-        app.job_queue.run_repeating(
-            send_words_to_all,
-            interval=180,  # каждые 3 минуты
-            first=60,       # первый раз через 1 минуту
-            name="daily_word",
-        )
-        logger.info("[JOB] Запланирована рассылка: каждые 180 сек, первый запуск через 60 сек")
-
-    application.post_init = startup_callback
+    # Рассылка через встроенный JobQueue
+    application.job_queue.run_repeating(
+        send_words_to_all,
+        interval=180,
+        first=60,
+        name="daily_word",
+    )
 
     logger.info("Бот запущен!")
     logger.info(f"Пользователей: {len(registered_users)} -> {list(registered_users)}")
-    logger.info("⏰ ТЕСТ: рассылка каждые 3 минуты")
+    logger.info("⏰ ТЕСТ: рассылка каждые 3 минуты (первый запуск через 60 сек)")
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
