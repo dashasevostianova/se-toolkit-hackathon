@@ -277,8 +277,7 @@ def main() -> None:
     application.add_error_handler(lambda update, ctx: logger.error("Error: %s", ctx.error))
 
     # === РАССЫЛКА каждые 3 минуты ===
-    # Запускаем job при старте приложения
-    def startup_callback(app: Application):
+    async def startup_callback(app: Application):
         app.job_queue.run_repeating(
             send_words_to_all,
             interval=180,  # каждые 3 минуты
