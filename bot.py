@@ -3,6 +3,7 @@ DailyEnglish Telegram Bot
 Ежедневный бот для изучения английских слов.
 """
 
+import json
 import logging
 import os
 import random
@@ -14,8 +15,6 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
-    MessageHandler,
-    filters,
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -31,51 +30,84 @@ logger = logging.getLogger(__name__)
 # Получаем токен из переменной окружения
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Отслеживание отправленных слов каждому пользователю (чтобы не повторяться в один день)
-user_daily_words: dict[int, set] = {}
-user_total_seen: dict[int, set] = {}  # все слова, которые пользователь уже видел
+# Файл для хранения данных пользователей
+USERS_FILE = "users.json"
+
+# Глобальное хранилище
+users_data: dict = {}  # {user_id: {"seen_words": [...], "last_word": "..."}}
+registered_users: set = set()  # set(user_id) — все, кто нажал /start
+
+
+def load_users():
+    """Загружает данные пользователей из файла."""
+    global users_data, registered_users
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            users_data = data.get("users", {})
+            registered_users = set(data.get("registered", []))
+        logger.info(f"Загружено {len(registered_users)} пользователей")
+    else:
+        logger.info("Файл users.json не найден, начинаем с нуля")
+
+
+def save_users():
+    """Сохраняет данные пользователей в файл."""
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump({
+            "users": users_data,
+            "registered": list(registered_users),
+        }, f, ensure_ascii=False, indent=2)
 
 
 def get_word_of_the_day(user_id: int) -> dict:
-    """
-    Получить слово дня для пользователя.
-    Если пользователь уже получил слово сегодня, вернуть то же самое.
-    """
+    """Получить слово для пользователя (новое или то же самое за 'день')."""
+    uid = str(user_id)
+    if uid not in users_data:
+        users_data[uid] = {"seen_words": [], "last_word": None, "date": None}
+
+    user = users_data[uid]
     today = datetime.now().strftime("%Y-%m-%d")
-    key = f"{user_id}_{today}"
 
-    if key not in user_daily_words:
-        # Выбираем случайное слово, которое пользователь ещё не видел
-        available = [w for w in VOCABULARY if w["word"] not in user_total_seen.get(user_id, set())]
-        if not available:
-            # Если все слова изучены, сбрасываем и начинаем заново
-            user_total_seen[user_id] = set()
-            available = VOCABULARY[:]
+    # Если сегодня уже получал слово — вернуть его
+    if user["date"] == today and user["last_word"]:
+        return next(w for w in VOCABULARY if w["word"] == user["last_word"])
 
-        word = random.choice(available)
-        user_daily_words[key] = word["word"]
-        user_total_seen.setdefault(user_id, set()).add(word["word"])
+    # Выбираем новое слово
+    seen = set(user["seen_words"])
+    available = [w for w in VOCABULARY if w["word"] not in seen]
+    if not available:
+        user["seen_words"] = []
+        available = VOCABULARY[:]
 
-    # Находим полное слово по названию
-    word_str = user_daily_words[key]
-    return next(w for w in VOCABULARY if w["word"] == word_str)
+    word = random.choice(available)
+    user["last_word"] = word["word"]
+    user["date"] = today
+    user["seen_words"].append(word["word"])
+
+    save_users()
+    return word
 
 
 def get_next_word(user_id: int) -> dict:
     """Получить следующее случайное слово (для кнопки Next)."""
-    available = [w for w in VOCABULARY if w["word"] not in user_total_seen.get(user_id, set())]
+    uid = str(user_id)
+    if uid not in users_data:
+        users_data[uid] = {"seen_words": [], "last_word": None, "date": None}
+
+    user = users_data[uid]
+    seen = set(user["seen_words"])
+    available = [w for w in VOCABULARY if w["word"] not in seen]
     if not available:
-        user_total_seen[user_id] = set()
+        user["seen_words"] = []
         available = VOCABULARY[:]
 
     word = random.choice(available)
-    user_total_seen.setdefault(user_id, set()).add(word["word"])
+    user["last_word"] = word["word"]
+    user["date"] = datetime.now().strftime("%Y-%m-%d")
+    user["seen_words"].append(word["word"])
 
-    # Обновляем слово дня
-    today = datetime.now().strftime("%Y-%m-%d")
-    key = f"{user_id}_{today}"
-    user_daily_words[key] = word["word"]
-
+    save_users()
     return word
 
 
@@ -97,14 +129,19 @@ def get_next_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик ошибок."""
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start."""
     user = update.effective_user
     user_id = user.id
 
-    # Инициализируем отслеживание
-    if user_id not in user_total_seen:
-        user_total_seen[user_id] = set()
+    # Регистрируем пользователя
+    registered_users.add(user_id)
+    save_users()
 
     word = get_word_of_the_day(user_id)
     message = format_word_message(word)
@@ -125,8 +162,9 @@ async def word_of_the_day(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Обработчик команды /word — получить сегодняшнее слово."""
     user_id = update.effective_user.id
 
-    if user_id not in user_total_seen:
-        user_total_seen[user_id] = set()
+    # Регистрируем если ещё нет
+    registered_users.add(user_id)
+    save_users()
 
     word = get_word_of_the_day(user_id)
     message = format_word_message(word)
@@ -140,7 +178,8 @@ async def word_of_the_day(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /stats — показать статистику."""
     user_id = update.effective_user.id
-    seen_count = len(user_total_seen.get(user_id, set()))
+    uid = str(user_id)
+    seen_count = len(users_data.get(uid, {}).get("seen_words", []))
     total_count = len(VOCABULARY)
 
     await update.message.reply_text(
@@ -169,8 +208,8 @@ async def next_word_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """Обработчик команды /next."""
     user_id = update.effective_user.id
 
-    if user_id not in user_total_seen:
-        user_total_seen[user_id] = set()
+    registered_users.add(user_id)
+    save_users()
 
     word = get_next_word(user_id)
     message = format_word_message(word)
@@ -188,8 +227,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     user_id = query.from_user.id
 
-    if user_id not in user_total_seen:
-        user_total_seen[user_id] = set()
+    registered_users.add(user_id)
+    save_users()
 
     word = get_next_word(user_id)
     message = format_word_message(word)
@@ -201,34 +240,44 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
-async def daily_word_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Ежедневная отправка слова всем активным пользователям."""
-    # Собираем всех пользователей, которые уже взаимодействовали с ботом
-    all_users = set(user_total_seen.keys())
+async def scheduled_word_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправка нового слова всем зарегистрированным пользователям."""
+    if not registered_users:
+        logger.info("Нет зарегистрированных пользователей, пропускаю")
+        return
 
-    for user_id in all_users:
+    logger.info(f"Отправляю слово {len(registered_users)} пользователям")
+
+    for user_id in registered_users:
         try:
             word = get_word_of_the_day(user_id)
             message = format_word_message(word)
 
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"☀️ <b>Доброе утро! Вот твоё слово на сегодня:</b>\n\n{message}",
+                text=f"📚 <b>Новое слово!</b>\n\n{message}",
                 parse_mode="HTML",
                 reply_markup=get_next_keyboard(),
             )
+            logger.info(f"Отправлено пользователю {user_id}: {word['word']}")
         except Exception as e:
-            logger.error(f"Ошибка отправки слова пользователю {user_id}: {e}")
+            logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
 
 
 def main() -> None:
     """Запуск бота."""
     if not BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN не установлен! Установите переменную окружения.")
+        logger.error("TELEGRAM_BOT_TOKEN не установлен!")
         return
+
+    # Загружаем сохранённых пользователей
+    load_users()
 
     # Создаём приложение
     application = Application.builder().token(BOT_TOKEN).build()
+
+    # Обработчик ошибок
+    application.add_error_handler(error_handler)
 
     # Регистрируем обработчики команд
     application.add_handler(CommandHandler("start", start))
@@ -243,15 +292,15 @@ def main() -> None:
     # Настраиваем рассылку каждые 3 минуты (для тестирования)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        daily_word_job,
+        scheduled_word_job,
         "interval",
         minutes=3,
-        args=[application._job_queue],
         replace_existing=True,
     )
     scheduler.start()
 
     logger.info("Бот запущен! Ожидание сообщений...")
+    logger.info(f"Зарегистрировано пользователей: {len(registered_users)}")
     logger.info("⏰ ТЕСТОВЫЙ РЕЖИМ: рассылка каждые 3 минуты")
 
     # Запускаем бота
