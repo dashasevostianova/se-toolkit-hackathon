@@ -10,7 +10,8 @@
       "Bash(git pull *)",
       "Bash(git stash)",
       "Bash(git stash *)",
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Bash(pip install *)"
     ]
   },
   "$version": 3

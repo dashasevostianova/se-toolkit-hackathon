@@ -1,0 +1,9 @@
+services:
+  dailyenglish:
+    build: .
+    container_name: dailyenglish
+    ports:
+      - "5000:5000"
+    restart: always
+    environment:
+      - FLASK_ENV=production

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DailyEnglish — Слово дня</title>
+    <title>DailyEnglish — Word of the Day</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,8 +24,8 @@
                 <span class="logo-icon">📚</span>
                 <h1>DailyEnglish</h1>
             </div>
-            <div class="timer-badge">
-                <span class="timer-dot"></span>
+            <div class="timer-badge" id="timerBadge">
+                <span class="timer-dot" id="timerDot"></span>
                 <span id="timer">3:00</span>
             </div>
         </header>
@@ -33,10 +33,12 @@
         <!-- Main Word Card -->
         <main class="word-section">
             <div id="wordCard" class="word-card">
+                <!-- Loading -->
                 <div class="card-loading" id="loading">
                     <div class="spinner"></div>
                 </div>
 
+                <!-- Word Content -->
                 <div id="wordContent" class="card-content hidden">
                     <div class="word-header">
                         <span id="wordEmoji" class="word-emoji"></span>
@@ -46,19 +48,25 @@
                     <div class="divider"></div>
 
                     <div class="translation-section">
-                        <span class="label">🇷🇺 Перевод</span>
+                        <span class="label">🇷🇺 Translation</span>
                         <p id="wordTranslation" class="translation"></p>
                     </div>
 
                     <div class="example-section">
-                        <span class="label">📝 Пример</span>
+                        <span class="label">📝 Example</span>
                         <blockquote id="wordExample" class="example"></blockquote>
+                    </div>
+
+                    <!-- All learned notification -->
+                    <div id="allLearnedBanner" class="all-learned-banner hidden">
+                        <span>🎉</span>
+                        <p>All words learned! Starting a new cycle.</p>
                     </div>
 
                     <div class="card-footer">
                         <span id="wordDate" class="date"></span>
                         <button id="nextBtn" class="next-btn" onclick="fetchNextWord()">
-                            <span>Следующее слово</span>
+                            <span>Next Word</span>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M5 12h14M12 5l7 7-7 7"/>
                             </svg>
@@ -75,7 +83,7 @@
                     <div class="stat-icon">✅</div>
                     <div class="stat-info">
                         <span id="statSeen" class="stat-value">0</span>
-                        <span class="stat-label">Изучено</span>
+                        <span class="stat-label">Learned</span>
                     </div>
                 </div>
                 <div class="stat-divider"></div>
@@ -83,7 +91,7 @@
                     <div class="stat-icon">📖</div>
                     <div class="stat-info">
                         <span id="statTotal" class="stat-value">{{ total_words }}</span>
-                        <span class="stat-label">Всего</span>
+                        <span class="stat-label">Total</span>
                     </div>
                 </div>
                 <div class="stat-divider"></div>
@@ -91,7 +99,7 @@
                     <div class="stat-icon">🎯</div>
                     <div class="stat-info">
                         <span id="statPercent" class="stat-value">0%</span>
-                        <span class="stat-label">Прогресс</span>
+                        <span class="stat-label">Progress</span>
                     </div>
                 </div>
             </div>
@@ -100,12 +108,13 @@
                 <div class="progress-bar">
                     <div id="progressFill" class="progress-fill" style="width: 0%"></div>
                 </div>
+                <div id="cycleInfo" class="cycle-info"></div>
             </div>
         </section>
 
         <!-- Footer -->
         <footer class="footer">
-            <p>💡 Новое слово автоматически обновляется каждые 3 минуты</p>
+            <p>💡 New word auto-refreshes every 3 minutes</p>
         </footer>
     </div>
 
