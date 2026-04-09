@@ -8,37 +8,12 @@ A web application that helps you learn one English word at a time — with trans
 
 ### Screenshots
 
-**Main word card:**
-- Shows the English word with emoji association
-- Russian translation (hidden by default, click to reveal)
-- Example sentence in context
-- 3-minute countdown timer in the header
-
-```
-┌─────────────────────────────────────────┐
-│  📚 DailyEnglish              🔴 3:00   │
-├─────────────────────────────────────────┤
-│                                         │
-│   🌿  Resilient                         │
-│                                         │
-│  ────────────────────────────────       │
-│                                         │
-│  🇷🇺 Translation     [👁️ Show]          │
-│  ████████████████ (blurred)             │
-│                                         │
-│  📝 Example                             │
-│  │ Children are remarkably resilient.   │
-│                                         │
-│  ────────────────────────────────       │
-│  📊 2 / 10           [Next Word →]      │
-│                                         │
-└─────────────────────────────────────────┘
-```
+**Main screen:**
+![alt text](image.png)
 
 **Settings panel (⚙️):**
-- Choose daily limit: 10 words / 20 words / All 90 words
-- Session progress bar
-- Round counter (cycles through words)
+![alt text](image-1.png)
+
 
 ## Product Context
 
