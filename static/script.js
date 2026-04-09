@@ -6,6 +6,9 @@ let timer = REFRESH_INTERVAL;
 let timerInterval = null;
 let isFetching = false;
 let hasError = false;
+let translationRevealed = false;
+let lastPoolProgress = 0;
+let currentDailyLimit = 10;
 
 // ===== DOM ELEMENTS =====
 const loading = document.getElementById("loading");
@@ -14,21 +17,24 @@ const wordEmoji = document.getElementById("wordEmoji");
 const wordText = document.getElementById("wordText");
 const wordTranslation = document.getElementById("wordTranslation");
 const wordExample = document.getElementById("wordExample");
-const wordDate = document.getElementById("wordDate");
 const timerEl = document.getElementById("timer");
 const timerBadge = document.getElementById("timerBadge");
 const timerDot = document.getElementById("timerDot");
-const statSeen = document.getElementById("statSeen");
-const statPercent = document.getElementById("statPercent");
+const statSeenToday = document.getElementById("statSeenToday");
+const statDailyLimit = document.getElementById("statDailyLimit");
+const statCycle = document.getElementById("statCycle");
 const progressFill = document.getElementById("progressFill");
-const cycleInfo = document.getElementById("cycleInfo");
-const allLearnedBanner = document.getElementById("allLearnedBanner");
+const revealBtn = document.getElementById("revealBtn");
+const poolProgressText = document.getElementById("poolProgressText");
+const poolProgressFill = document.getElementById("poolProgressFill");
+const reshuffleBanner = document.getElementById("reshuffleBanner");
+const settingsPanel = document.getElementById("settingsPanel");
 const nextBtn = document.getElementById("nextBtn");
+const currentLimitEl = document.getElementById("currentLimit");
 
-// ===== FUNCTIONS =====
+// ===== TIMER =====
 
 function updateTimerDisplay() {
-    // Clamp timer to 0 minimum
     if (timer < 0) timer = 0;
     const minutes = Math.floor(timer / 60);
     const seconds = timer % 60;
@@ -46,7 +52,6 @@ function setTimerState(active) {
 }
 
 function startTimer() {
-    // Clear existing timer
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -77,28 +82,107 @@ function stopTimer() {
     setTimerState(false);
 }
 
+// ===== TRANSLATION REVEAL =====
+
+function toggleTranslation() {
+    if (translationRevealed) {
+        wordTranslation.classList.remove("revealed");
+        wordTranslation.classList.add("blur-text");
+        revealBtn.innerHTML = "👁️ Show";
+        translationRevealed = false;
+    } else {
+        wordTranslation.classList.add("revealed");
+        wordTranslation.classList.remove("blur-text");
+        revealBtn.innerHTML = "🙈 Hide";
+        translationRevealed = true;
+    }
+}
+
+// ===== SETTINGS =====
+
+function toggleSettings() {
+    settingsPanel.classList.toggle("hidden");
+}
+
+function setLimit(limit) {
+    // Update active button
+    document.querySelectorAll(".limit-btn").forEach(btn => {
+        btn.classList.toggle("active", parseInt(btn.dataset.limit) === limit);
+    });
+
+    // Send to backend
+    fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daily_limit: limit }),
+    })
+    .then(res => res.json())
+    .then(data => {
+        currentDailyLimit = data.daily_limit;
+        currentLimitEl.textContent = currentDailyLimit;
+        statDailyLimit.textContent = currentDailyLimit;
+    })
+    .catch(err => console.error("Error updating settings:", err));
+}
+
+async function loadSettings() {
+    try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+        currentDailyLimit = data.daily_limit;
+        currentLimitEl.textContent = currentDailyLimit;
+        statDailyLimit.textContent = currentDailyLimit;
+
+        // Highlight active button
+        document.querySelectorAll(".limit-btn").forEach(btn => {
+            btn.classList.toggle("active", parseInt(btn.dataset.limit) === currentDailyLimit);
+        });
+    } catch (err) {
+        console.error("Error loading settings:", err);
+    }
+}
+
+// ===== WORD FETCHING =====
+
+function resetTranslation() {
+    translationRevealed = false;
+    wordTranslation.classList.remove("revealed");
+    wordTranslation.classList.add("blur-text");
+    revealBtn.innerHTML = "👁️ Show";
+}
+
 function displayWord(data) {
+    resetTranslation();
+
     wordEmoji.textContent = data.emoji;
     wordText.textContent = data.word;
     wordTranslation.textContent = data.translation;
     wordExample.textContent = `"${data.example}"`;
 
-    const now = new Date();
-    wordDate.textContent = now.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
+    // Pool progress
+    poolProgressText.textContent = `${data.pool_progress} / ${data.pool_size}`;
+    const pct = (data.pool_progress / data.pool_size) * 100;
+    poolProgressFill.style.width = `${Math.min(pct, 100)}%`;
 
-    // Show/hide "all learned" banner
-    if (data.all_learned) {
-        allLearnedBanner.classList.remove("hidden");
+    // Show reshuffle banner if pool was exhausted and restarted
+    if (data.cycle > 1 && data.pool_progress <= 1) {
+        reshuffleBanner.classList.remove("hidden");
+        setTimeout(() => {
+            reshuffleBanner.classList.add("hidden");
+        }, 4000);
     } else {
-        allLearnedBanner.classList.add("hidden");
+        reshuffleBanner.classList.add("hidden");
     }
 
+    // Stats
+    statSeenToday.textContent = data.pool_progress;
+    statCycle.textContent = data.cycle;
+
+    // Progress bar
+    const progressPct = (data.pool_progress / data.pool_size) * 100;
+    progressFill.style.width = `${Math.min(progressPct, 100)}%`;
+
+    // Show content
     loading.classList.add("hidden");
     wordContent.classList.remove("hidden");
 
@@ -128,12 +212,10 @@ async function fetchNextWord() {
 
         const data = await res.json();
         displayWord(data);
-        await fetchStats();
         startTimer();
     } catch (err) {
         console.error("Error fetching word:", err);
         hasError = true;
-        // Restart timer after 10 seconds on error
         stopTimer();
         timer = 10;
         updateTimerDisplay();
@@ -152,32 +234,9 @@ async function fetchNextWord() {
     }
 }
 
-async function fetchStats() {
-    try {
-        const res = await fetch("/api/stats");
-        if (!res.ok) return;
-
-        const stats = await res.json();
-
-        // Cap percent at 100
-        const pct = Math.min(stats.percent, 100);
-        statSeen.textContent = stats.seen;
-        statPercent.textContent = `${pct}%`;
-        progressFill.style.width = `${pct}%`;
-
-        // Show cycle info
-        if (stats.reset_count > 0) {
-            cycleInfo.textContent = `Cycle #${stats.reset_count + 1}`;
-        } else {
-            cycleInfo.textContent = "";
-        }
-    } catch (err) {
-        console.error("Error fetching stats:", err);
-    }
-}
-
 // ===== INIT =====
 document.addEventListener("DOMContentLoaded", () => {
+    loadSettings();
     fetchNextWord();
 });
 

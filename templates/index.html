@@ -24,11 +24,45 @@
                 <span class="logo-icon">📚</span>
                 <h1>DailyEnglish</h1>
             </div>
-            <div class="timer-badge" id="timerBadge">
-                <span class="timer-dot" id="timerDot"></span>
-                <span id="timer">3:00</span>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <button class="settings-btn" onclick="toggleSettings()" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                </button>
+                <div class="timer-badge" id="timerBadge">
+                    <span class="timer-dot" id="timerDot"></span>
+                    <span id="timer">3:00</span>
+                </div>
             </div>
         </header>
+
+        <!-- Settings Panel -->
+        <div id="settingsPanel" class="settings-panel hidden">
+            <div class="settings-header">
+                <h3>⚙️ Daily Limit</h3>
+                <button class="close-btn" onclick="toggleSettings()">✕</button>
+            </div>
+            <p class="settings-desc">How many words per session?</p>
+            <div class="limit-options">
+                <button class="limit-btn" data-limit="10" onclick="setLimit(10)">
+                    <span class="limit-num">10</span>
+                    <span class="limit-label">words</span>
+                </button>
+                <button class="limit-btn" data-limit="20" onclick="setLimit(20)">
+                    <span class="limit-num">20</span>
+                    <span class="limit-label">words</span>
+                </button>
+                <button class="limit-btn" data-limit="90" onclick="setLimit(90)">
+                    <span class="limit-num">{{ total_words }}</span>
+                    <span class="limit-label">all words</span>
+                </button>
+            </div>
+            <div class="current-limit-display">
+                Current: <span id="currentLimit">10</span> words per session
+            </div>
+        </div>
 
         <!-- Main Word Card -->
         <main class="word-section">
@@ -48,8 +82,13 @@
                     <div class="divider"></div>
 
                     <div class="translation-section">
-                        <span class="label">🇷🇺 Translation</span>
-                        <p id="wordTranslation" class="translation"></p>
+                        <div class="translation-header">
+                            <span class="label">🇷🇺 Translation</span>
+                            <button id="revealBtn" class="reveal-btn" onclick="toggleTranslation()">
+                                👁️ Show
+                            </button>
+                        </div>
+                        <p id="wordTranslation" class="translation blur-text"></p>
                     </div>
 
                     <div class="example-section">
@@ -57,14 +96,19 @@
                         <blockquote id="wordExample" class="example"></blockquote>
                     </div>
 
-                    <!-- All learned notification -->
-                    <div id="allLearnedBanner" class="all-learned-banner hidden">
-                        <span>🎉</span>
-                        <p>All words learned! Starting a new cycle.</p>
+                    <!-- Pool exhausted notification -->
+                    <div id="reshuffleBanner" class="reshuffle-banner hidden">
+                        <span>🔀</span>
+                        <p>Session complete! Words reshuffled for next round.</p>
                     </div>
 
                     <div class="card-footer">
-                        <span id="wordDate" class="date"></span>
+                        <div class="pool-progress-mini">
+                            <span id="poolProgressText">1 / 10</span>
+                            <div class="progress-bar-mini">
+                                <div id="poolProgressFill" class="progress-fill-mini" style="width: 0%"></div>
+                            </div>
+                        </div>
                         <button id="nextBtn" class="next-btn" onclick="fetchNextWord()">
                             <span>Next Word</span>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -82,24 +126,24 @@
                 <div class="stat-item">
                     <div class="stat-icon">✅</div>
                     <div class="stat-info">
-                        <span id="statSeen" class="stat-value">0</span>
-                        <span class="stat-label">Learned</span>
+                        <span id="statSeenToday" class="stat-value">0</span>
+                        <span class="stat-label">Today</span>
                     </div>
                 </div>
                 <div class="stat-divider"></div>
                 <div class="stat-item">
                     <div class="stat-icon">📖</div>
                     <div class="stat-info">
-                        <span id="statTotal" class="stat-value">{{ total_words }}</span>
-                        <span class="stat-label">Total</span>
+                        <span id="statDailyLimit" class="stat-value">10</span>
+                        <span class="stat-label">Daily Limit</span>
                     </div>
                 </div>
                 <div class="stat-divider"></div>
                 <div class="stat-item">
-                    <div class="stat-icon">🎯</div>
+                    <div class="stat-icon">🔄</div>
                     <div class="stat-info">
-                        <span id="statPercent" class="stat-value">0%</span>
-                        <span class="stat-label">Progress</span>
+                        <span id="statCycle" class="stat-value">1</span>
+                        <span class="stat-label">Round</span>
                     </div>
                 </div>
             </div>
@@ -108,7 +152,6 @@
                 <div class="progress-bar">
                     <div id="progressFill" class="progress-fill" style="width: 0%"></div>
                 </div>
-                <div id="cycleInfo" class="cycle-info"></div>
             </div>
         </section>
 
